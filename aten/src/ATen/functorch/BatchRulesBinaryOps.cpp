@@ -357,8 +357,6 @@ TORCH_LIBRARY_IMPL(aten, FuncTorchBatched, m) {
   BINARY_SCALAR_2(__rshift__, Tensor, Scalar);
 
   BINARY_SCALAR_2(add, Tensor, Scalar);
-  BINARY_SCALAR_2(luis_add, Tensor, Scalar);
-
   POINTWISE_BOXED(addcdiv);
   POINTWISE_BOXED(addcmul);
   BINARY_POINTWISE(atan2);
@@ -465,7 +463,6 @@ TORCH_LIBRARY_IMPL(aten, FuncTorchBatched, m) {
 
   POINTWISE_BOXED(add_.Tensor); // just testing
   VMAP_SUPPORT2(add_, Scalar, SINGLE_ARG(unary_inplace_batch_rule<ScalarScalarInplaceT, &Tensor::add_, const Scalar&, const Scalar&>));
-  VMAP_SUPPORT2(luis_add_, Scalar, SINGLE_ARG(unary_inplace_batch_rule<ScalarScalarInplaceT, &Tensor::add_, const Scalar&, const Scalar&>));
   VMAP_SUPPORT2(sub_, Tensor, SINGLE_ARG(binary_pointwise_inplace_batch_rule<TensorScalarInplaceT, &Tensor::sub_, const Scalar&>));
   VMAP_SUPPORT2(sub_, Scalar, SINGLE_ARG(unary_inplace_batch_rule<ScalarScalarInplaceT, &Tensor::sub_, const Scalar&, const Scalar&>));
   VMAP_SUPPORT2(mul_, Tensor, SINGLE_ARG(binary_pointwise_inplace_batch_rule<TensorInplaceT, &Tensor::mul_>));
