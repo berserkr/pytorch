@@ -441,6 +441,22 @@ Tensor& add_sparse_(Tensor& self, const Tensor& other, const Scalar& alpha) {
   return at::add_out(self, self, other, alpha);  // redispatch!
 }
 
+// LUIS_MODS
+Tensor luis_add_sparse(const Tensor& self, const Tensor& other, const Scalar& alpha) {
+  // TODO: Why?! Can't we just flip the order here...
+  TORCH_CHECK(!(self.is_sparse() && !other.is_sparse()),
+              "add(sparse, dense) is not supported. Use add(dense, sparse) instead.");
+  auto commonDtype = at::result_type(self, other);
+  alpha_check(commonDtype, alpha);
+  Tensor result = at::empty({0}, self.options().dtype(commonDtype));
+  return at::luis_add_out(result, self, other, alpha);  // redispatch!
+}
+
+Tensor& luis_add_sparse_(Tensor& self, const Tensor& other, const Scalar& alpha) {
+  return at::luis_add_out(self, self, other, alpha);  // redispatch!
+}
+// LUIS_MODS
+
 // There's actually nothing sparse specific about these implementations
 
 Tensor sub_sparse(const Tensor& self, const Tensor& other, const Scalar& alpha) {
@@ -609,6 +625,43 @@ SparseTensor& add_out_sparse_cpu(const SparseTensor& t, const SparseTensor& src,
     return add_out_sparse_non_contiguous(r, t, src, value, commonDtype);
   }
 }
+
+//LUIS_MODS
+// TO dig deeper, we may also need to modify methds below such as add_out_dense_sparse_cpu, add_out_sparse_contiguous, add_out_sparse_non_contiguous, etc...
+SparseTensor& luis_add_out_sparse_cpu(const SparseTensor& t, const SparseTensor& src, const Scalar& value, SparseTensor& r) {
+  if (!t.is_sparse()) {
+    return add_out_dense_sparse_cpu(r, t, src, value);
+  }
+  // TODO: This test seems a bit goofy
+  TORCH_CHECK(src.is_sparse(), "luis_add(sparse, dense) is not supported. Use add(dense, sparse) instead.");
+  AT_ASSERT(!t.is_cuda());  // the dispatch argument
+  TORCH_CHECK(!r.is_cuda(), "luis_add: expected 'out' to be CPU tensor, but got CUDA tensor");
+  TORCH_CHECK(!src.is_cuda(), "luis_add: expected 'other' to be a CPU tensor, but got a CUDA tensor");
+
+  TORCH_CHECK(t.sizes().equals(src.sizes()), "luis_add: expected sizes of 'self' and 'other' to match, but ", t.sizes(), " != ", src.sizes());
+
+  auto commonDtype = promoteTypes(t.scalar_type(), src.scalar_type());
+
+  TORCH_CHECK(canCast(commonDtype, r.scalar_type()), "Can't convert result type ", commonDtype, " to output ", r.scalar_type(), " in add operation");
+
+  if (src._nnz() == 0) {
+    return copy_sparse_to_sparse_(r, t);
+  }
+  if (t._nnz() == 0) {
+    return mul_out_sparse_scalar(r, src, value);
+  }
+
+  TORCH_CHECK(is_same_density(t, src), "luis_add: expected 'self' and 'other' to have same density, but 'self' has ", t.sparse_dim(), " sparse dimensions while 'other' has ", src.sparse_dim(), " sparse dimensions");
+
+  r.resize_as_(src);
+
+  if (src._values().is_contiguous() && t._values().is_contiguous()) {
+    return add_out_sparse_contiguous(r, t, src, value, commonDtype);
+  } else {
+    return add_out_sparse_non_contiguous(r, t, src, value, commonDtype);
+  }
+}
+//LUIS_MODS
 
 // --------------------------------------------------------------------
 // add(Tensor, SparseTensor, Scalar)

@@ -1229,6 +1229,193 @@ void add_out_sparse_csr(
       });
 }
 
+//LUIS_MODS
+
+/*
+  Computes C = alpha * A + beta * B
+
+  Args:
+  * `A` - [in] sparse Tensor of size m × n.
+  * `B` - [in] sparse Tensor of size m × n.
+  * `C` - [out] sparse Tensor of size m × n.
+*/
+void luis_add_out_sparse_csr(
+    const at::sparse_csr::SparseCsrTensor& A,
+    const at::sparse_csr::SparseCsrTensor& B,
+    const Scalar& alpha,
+    const Scalar& beta,
+    const at::sparse_csr::SparseCsrTensor& C) {
+  IntArrayRef A_sizes = A.sizes();
+  auto ndim = A.dim();
+  int m = at::native::cuda_int_cast(A_sizes[ndim - 2], "m");
+  int n = at::native::cuda_int_cast(A_sizes[ndim - 1], "n");
+
+  TORCH_INTERNAL_ASSERT_DEBUG_ONLY(A.sizes().equals(B.sizes()) && A.sizes().equals(C.sizes()));
+
+  // Only 32-bit indices are supported
+  const auto output_indices_dtype = promoteTypes(A.crow_indices().scalar_type(), B.crow_indices().scalar_type());
+  auto A_32 = at::native::_sparse_csr_tensor_unsafe(
+      A.crow_indices().to(kInt),
+      A.col_indices().to(kInt),
+      A.values(),
+      A.sizes(),
+      A.scalar_type(),
+      A.layout(),
+      A.device());
+  auto B_32 = at::native::_sparse_csr_tensor_unsafe(
+      B.crow_indices().to(kInt),
+      B.col_indices().to(kInt),
+      B.values(),
+      B.sizes(),
+      B.scalar_type(),
+      B.layout(),
+      B.device());
+
+  // Modify C tensor in-place to swap indices tensors with 32-bit variants
+  auto C_crow_indices_backup = C.crow_indices();
+  auto C_col_indices_backup = C.col_indices();
+  indices_to_32_bit_inplace(C); // no-op with 32-bit indices
+
+  int nnzA = at::native::cuda_int_cast(A_32._nnz(), "nnzA");
+  int nnzB = at::native::cuda_int_cast(B_32._nnz(), "nnzB");
+
+  auto desc = at::cuda::sparse::CuSparseMatDescriptor();
+
+  auto A_crow_indices = A_32.crow_indices();
+  auto B_crow_indices = B_32.crow_indices();
+  auto C_crow_indices = C.crow_indices();
+  auto A_crow_indices_ptr = A_crow_indices.data_ptr<int>();
+  auto B_crow_indices_ptr = B_crow_indices.data_ptr<int>();
+  auto C_crow_indices_ptr = C_crow_indices.data_ptr<int>();
+
+  auto A_col_indices = A_32.col_indices();
+  auto B_col_indices = B_32.col_indices();
+  auto C_col_indices = C.col_indices();
+  auto A_col_indices_ptr = A_col_indices.data_ptr<int>();
+  auto B_col_indices_ptr = B_col_indices.data_ptr<int>();
+  auto C_col_indices_ptr = C_col_indices.data_ptr<int>();
+
+  // Windows compilers don't support nested macros
+  // so we need this lambda outside of the
+  // AT_DISPATCH_FLOATING_AND_COMPLEX_TYPES
+  auto fix_nnz = [
+#if AT_ROCM_ENABLED()
+                     &C_crow_indices,
+                     &m
+#endif
+  ](int nnz) -> int {
+// For some reason POINTER_MODE_HOST is not working here
+// Let's extract manually the nnz from the C_crow_indices
+#if AT_ROCM_ENABLED()
+    return std::max({nnz, C_crow_indices.narrow(-1, m, 1).item<int>()});
+#else
+    return nnz;
+#endif
+  };
+
+  AT_DISPATCH_FLOATING_AND_COMPLEX_TYPES(
+      C.scalar_type(), "luis_add_out_sparse_csr_impl", [&] {
+        auto beta_ = beta.to<scalar_t>();
+        auto alpha_ = alpha.to<scalar_t>();
+
+        auto A_values = A_32.values();
+        auto B_values = B_32.values();
+        auto C_values = C.values();
+        auto A_values_ptr = A_values.data_ptr<scalar_t>();
+        auto B_values_ptr = B_values.data_ptr<scalar_t>();
+        auto C_values_ptr = C_values.data_ptr<scalar_t>();
+
+        auto handle = at::cuda::getCurrentCUDASparseHandle();
+        TORCH_CUDASPARSE_CHECK(cusparseSetPointerMode(handle, CUSPARSE_POINTER_MODE_HOST));
+
+        size_t buffer_size;
+        at::cuda::sparse::csrgeam2_bufferSizeExt<scalar_t>(
+            handle,
+            m,
+            n,
+            &alpha_,
+            desc.descriptor(),
+            nnzA,
+            A_values_ptr,
+            A_crow_indices_ptr,
+            A_col_indices_ptr,
+            &beta_,
+            desc.descriptor(),
+            nnzB,
+            B_values_ptr,
+            B_crow_indices_ptr,
+            B_col_indices_ptr,
+            desc.descriptor(),
+            C_values_ptr,
+            C_crow_indices_ptr,
+            C_col_indices_ptr,
+            &buffer_size // output
+        );
+
+        auto& allocator = *c10::cuda::CUDACachingAllocator::get();
+        auto work_data = allocator.allocate(buffer_size);
+
+        int nnzC = -1;
+        at::cuda::sparse::csrgeam2Nnz<scalar_t>(
+            handle,
+            m,
+            n,
+            desc.descriptor(),
+            nnzA,
+            A_crow_indices_ptr,
+            A_col_indices_ptr,
+            desc.descriptor(),
+            nnzB,
+            B_crow_indices_ptr,
+            B_col_indices_ptr,
+            desc.descriptor(),
+            C_crow_indices_ptr,
+            &nnzC,
+            work_data.get());
+
+        nnzC = fix_nnz(nnzC);
+
+        // Resize result using nnz information from cusparse
+        col_indices_and_values_resize_(C, nnzC);
+        C_col_indices = C.col_indices();
+        C_values = C.values();
+
+        C_col_indices_ptr = C_col_indices.data_ptr<int>();
+        C_values_ptr = C_values.data_ptr<scalar_t>();
+
+        at::cuda::sparse::csrgeam2<scalar_t>(
+            handle,
+            m,
+            n,
+            &alpha_,
+            desc.descriptor(),
+            nnzA,
+            A_values_ptr,
+            A_crow_indices_ptr,
+            A_col_indices_ptr,
+            &beta_,
+            desc.descriptor(),
+            nnzB,
+            B_values_ptr,
+            B_crow_indices_ptr,
+            B_col_indices_ptr,
+            desc.descriptor(),
+            C_values_ptr,
+            C_crow_indices_ptr,
+            C_col_indices_ptr,
+            work_data.get());
+
+        if (output_indices_dtype == at::kLong) {
+          static_cast<SparseCsrTensorImpl*>(C.unsafeGetTensorImpl())->set_member_tensors(
+              C_crow_indices_backup.copy_(C.crow_indices()),
+              C_col_indices_backup.resize_({nnzC}).copy_(C.col_indices()),
+              C.values(),
+              C.sizes());
+        }
+      });
+}
+//LUIS_MODS
+
 /*
   Solves a system of linear equations whose coefficients are represented in a sparse triangular matrix A:
   op(A) X = B.

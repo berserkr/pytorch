@@ -811,6 +811,25 @@ Tensor& add_sparse_csr_(
   return at::add_out(self, self, other, alpha); // redispatch!
 }
 
+// LUIS_MODS
+Tensor luis_add_sparse_csr(
+    const Tensor& self,
+    const Tensor& other,
+    const Scalar& alpha) {
+  auto commonDtype = at::result_type(self, other);
+  alpha_check(commonDtype, alpha);
+  Tensor result = at::empty_like(self, self.options().dtype(commonDtype).memory_format(at::MemoryFormat::Contiguous));
+  return at::luis_add_out(result, self, other, alpha); // redispatch!
+}
+
+Tensor& luis_add_sparse_csr_(
+    Tensor& self,
+    const Tensor& other,
+    const Scalar& alpha) {
+  return at::luis_add_out(self, self, other, alpha); // redispatch!
+}
+// LUIS_MODS
+
 void add_out_dense_sparse_csr_cpu(
     const Tensor& out,
     const Tensor& dense,
@@ -944,6 +963,33 @@ Tensor& add_out_sparse_csr_cpu(
   }
   return out;
 }
+
+//LUIS_MODS
+Tensor& luis_add_out_sparse_csr_cpu(
+    const Tensor& self,
+    const SparseCsrTensor& other,
+    const Scalar& alpha,
+    SparseCsrTensor& out) {
+  if (self.layout() == kStrided) {
+    add_out_dense_sparse_csr_cpu(out, self, other, alpha);
+  } else {
+    TORCH_CHECK(
+        self.sizes().equals(other.sizes()),
+        "torch.add: Expected input tensors to have the same shape, but got tensor `self` with shape ",
+        self.sizes(),
+        " and tensor `other` with shape ",
+        other.sizes());
+
+    if (only_sparse_compressed_add_trivial_cases(self, other, alpha, out)) {
+      return out;
+    }
+
+    at::native::resize_as_sparse_compressed_(out, self);
+    sparse::impl::cpu::add_out_sparse_csr(self, other, alpha, out);
+  }
+  return out;
+}
+//LUIS_MODS
 
 /*
     Reductions on sparse CSR tensors using masked semantics.

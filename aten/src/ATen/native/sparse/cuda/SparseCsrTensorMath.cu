@@ -286,6 +286,47 @@ Tensor& add_out_sparse_csr_cuda(
   return out;
 }
 
+//LUIS_MODS
+Tensor& luis_add_out_sparse_csr_cuda(
+    const Tensor& self,
+    const SparseCsrTensor& other,
+    const Scalar& alpha,
+    SparseCsrTensor& out) {
+  if (self.layout() == kStrided) {
+    add_out_dense_sparse_csr_cuda(out, self, other, alpha);
+  } else {
+    TORCH_CHECK(
+        self.sizes().equals(other.sizes()),
+        "torch.luis_add: Expected input tensors to have the same shape, but got tensor `self` with shape ",
+        self.sizes(),
+        " and tensor `other` with shape ",
+        other.sizes());
+    TORCH_CHECK(
+      self.is_cuda(),
+      "luis_add: expected 'self' to be CUDA tensor, but got tensor on device: ",
+      self.device());
+    TORCH_CHECK(
+      other.is_cuda(),
+      "luis_add: expected 'other' to be CUDA tensor, but got tensor on device: ",
+      other.device());
+    TORCH_CHECK(
+      out.is_cuda(),
+      "luis_add: expected 'out' to be CUDA tensor, but got tensor on device: ",
+      out.device());
+
+    if (only_sparse_compressed_add_trivial_cases(self, other, alpha, out)) {
+      return out;
+    }
+
+    at::native::resize_as_sparse_compressed_(out, self);
+
+    // TODO: may need to go a level deeper here...
+    sparse::impl::cuda::add_out_sparse_csr(self, other, Scalar(1), alpha, out);
+  }
+  return out;
+}
+//LUIS_MODS
+
 TORCH_IMPL_FUNC(_convert_indices_from_coo_to_csr_structured_cuda) (
   const Tensor& input, const int64_t size, const bool out_int32, const Tensor& result
 ) {
@@ -313,6 +354,7 @@ TORCH_IMPL_FUNC(_convert_indices_from_csr_to_coo_structured_cuda) (
     });
   }
 }
+
 
   /*
     Reductions on sparse CSR tensors using masked semantics.

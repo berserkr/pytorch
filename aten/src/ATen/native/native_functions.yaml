@@ -537,6 +537,48 @@
     MPS: add_out_mps
   tags: pointwise
 
+# ************************** START LUIS_MODS ***********************************
+- func: luis_add.Tensor(Tensor self, Tensor other, *, Scalar alpha=1) -> Tensor
+  device_check: NoCheck   # TensorIterator
+  structured_delegate: luis_add.out
+  variants: function, method
+  dispatch:
+    SparseCPU, SparseCUDA: luis_add_sparse
+    SparseCsrCPU, SparseCsrCUDA: luis_add_sparse_csr
+    MkldnnCPU: mkldnn_luis_add
+    ZeroTensor: luis_add_zerotensor
+    NestedTensorCPU, NestedTensorCUDA: NestedTensor_luis_add_Tensor
+  tags: [core, pointwise]
+
+- func: luis_add_.Tensor(Tensor(a!) self, Tensor other, *, Scalar alpha=1) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  variants: method
+  structured_delegate: luis_add.out
+  dispatch:
+    SparseCPU, SparseCUDA: luis_add_sparse_
+    SparseCsrCPU, SparseCsrCUDA: luis_add_sparse_csr_
+    MkldnnCPU: mkldnn_luis_add_
+    NestedTensorCPU, NestedTensorCUDA: NestedTensor_luis_add_Tensor
+  tags: pointwise
+
+- func: luis_add.out(Tensor self, Tensor other, *, Scalar alpha=1, Tensor(a!) out) -> Tensor(a!)
+  device_check: NoCheck   # TensorIterator
+  structured: True
+  structured_inherits: TensorIteratorBase
+  ufunc_inner_loop:
+    Generic: luis_add (AllAndComplex, BFloat16, Half, ComplexHalf) # ask what this is about
+    ScalarOnly: luis_add (Bool) # same here, what is this?
+  dispatch:
+    SparseCPU: luis_add_out_sparse_cpu
+    SparseCUDA: luis_add_out_sparse_cuda
+    SparseCsrCPU: luis_add_out_sparse_csr_cpu
+    SparseCsrCUDA: luis_add_out_sparse_csr_cuda
+    MkldnnCPU: mkldnn_luis_add_out
+    MPS: luis_add_out_mps
+  tags: pointwise
+# ************************** END LUIS_MODS ***********************************
+
+
 - func: _add_relu.Tensor(Tensor self, Tensor other, *, Scalar alpha=1) -> Tensor
   variants: function
   dispatch:

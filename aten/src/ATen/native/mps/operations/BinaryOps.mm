@@ -311,6 +311,50 @@ void add_sub_template(const Tensor& self,
                  add_sub_op_block);
 }
 
+//LUIS_MODS
+void luis_add_template(const Tensor& self,
+                      const Tensor& other,
+                      const Scalar& alpha,
+                      const Tensor& output,
+                      std::string op_name) {
+  if (alpha.toDouble() == 0.0) {
+    if (!self.is_alias_of(output)) { // if inplace, no-op
+      const_cast<Tensor&>(output) = self.clone();
+    }
+    return;
+  }
+
+  const bool alpha_has_value = alpha.toDouble() != 1.0;
+  if (alpha_has_value) {
+    auto commonDtype = at::result_type(self, other);
+    at::native::alpha_check(commonDtype, alpha);
+  }
+
+  BinaryOpBlock add_sub_op_block = ^BinaryOpFn(cachedGraph, primaryCastTensor, secondaryCastTensor) {
+    MPSGraph* mpsGraph = cachedGraph->graph();
+    MPSGraphTensor* secondaryTensor = secondaryCastTensor;
+
+    // if alpha is 1.0, then we don't bother adding another multiply to graph
+    if (alpha_has_value) {
+      cachedGraph->alphaTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(other.scalar_type()), @[ @1 ]);
+      secondaryTensor = [mpsGraph multiplicationWithPrimaryTensor:secondaryCastTensor
+                                                  secondaryTensor:cachedGraph->alphaTensor
+                                                             name:nil];
+    }
+
+    return [mpsGraph additionWithPrimaryTensor:primaryCastTensor secondaryTensor:secondaryTensor name:nil];
+
+  };
+  // add alpha's type to the key only if multiply was added to graph
+  binaryOpTensor(self,
+                 other,
+                 alpha,
+                 output,
+                 op_name + "_out_mps:" + (alpha_has_value ? getMPSTypeString(alpha.type()) : ""),
+                 add_sub_op_block);
+}
+//LUIS_MODS
+
 } // namespace mps
 
 #define CREATE_MPS_BINARY_COMPARISON_OP_FUNC(func_out, func_stub, other_type)                       \
@@ -404,6 +448,12 @@ TORCH_IMPL_FUNC(div_out_mps)(const Tensor& self, const Tensor& other, const Tens
 TORCH_IMPL_FUNC(add_out_mps)(const Tensor& self, const Tensor& other, const Scalar& alpha, const Tensor& output) {
   mps::add_sub_template(self, other, alpha, output, "add");
 }
+
+//LUIS_MODS
+TORCH_IMPL_FUNC(luis_add_out_mps)(const Tensor& self, const Tensor& other, const Scalar& alpha, const Tensor& output) {
+  mps::luis_add_template(self, other, alpha, output, "luis_add");
+}
+//LUIS_MODS
 
 TORCH_IMPL_FUNC(sub_out_mps)(const Tensor& self, const Tensor& other, const Scalar& alpha, const Tensor& output) {
   mps::add_sub_template(self, other, alpha, output, "sub");

@@ -33,6 +33,25 @@ Tensor& mkldnn_add_(Tensor& self, const Tensor& other, const Scalar& alpha) {
   TORCH_CHECK(false, "mkldnn_add_: ATen not compiled with MKLDNN support");
 }
 
+// LUIS_MODS
+Tensor& mkldnn_luis_add_out(
+    const Tensor& self,
+    const Tensor& other,
+    const Scalar& alpha,
+    Tensor& result
+    ) {
+  TORCH_CHECK(false, "mkldnn_luis_add_out: ATen not compiled with MKLDNN support");
+}
+
+Tensor mkldnn_luis_add(const Tensor& self, const Tensor& other, const Scalar& alpha) {
+  TORCH_CHECK(false, "mkldnn_luis_add: ATen not compiled with MKLDNN support");
+}
+
+Tensor& mkldnn_luis_add_(Tensor& self, const Tensor& other, const Scalar& alpha) {
+  TORCH_CHECK(false, "mkldnn_luis_add_: ATen not compiled with MKLDNN support");
+}
+// LUIS_MODS
+
 Tensor& mkldnn_mul_out(const Tensor& self, const Tensor& other, Tensor& result) {
   TORCH_CHECK(false, "mkldnn_mul_out: ATen not compiled with MKLDNN support");
 }
@@ -117,6 +136,49 @@ Tensor mkldnn_add(const Tensor& self, const Tensor& other, const Scalar& alpha) 
 Tensor& mkldnn_add_(Tensor& self, const Tensor& other, const Scalar& alpha) {
   return native::mkldnn_add_out(self, other, alpha, self);
 }
+
+// LUIS_MODS
+Tensor& mkldnn_luis_add_out(
+    const Tensor& self,
+    const Tensor& other,
+    const Scalar& alpha,
+    Tensor& result
+    ) {
+  ideep::tensor& x = itensor_from_mkldnn(self);
+  ideep::tensor& y = itensor_from_mkldnn(other);
+
+  ideep::tensor& z = itensor_from_mkldnn(result);
+  if (result.is_same(other)) {
+    const std::vector<float> scales{alpha.to<float>(), 1.0};
+    ideep::sum::compute(scales, {y, x}, z);
+  } else {
+    const std::vector<float> scales{1.0, alpha.to<float>()};
+    ideep::sum::compute(scales, {x, y}, z);
+  }
+
+  return result;
+}
+
+Tensor mkldnn_luis_add(const Tensor& self, const Tensor& other, const Scalar& alpha) {
+  if (self.numel() == 0 || other.numel() == 0) {
+    return emptyBinaryOp(self, other);
+  }
+
+  ideep::tensor& x = itensor_from_mkldnn(self);
+  ideep::tensor& y = itensor_from_mkldnn(other);
+
+  ideep::tensor z;
+  const std::vector<float> scales{1.0, alpha.to<float>()};
+  ideep::sum::compute(scales, {x, y}, z);
+
+  return new_with_itensor_mkldnn(std::move(z), optTypeMetaToScalarType(self.options().dtype_opt()),
+                                 self.options().device_opt());
+}
+
+Tensor& mkldnn_luis_add_(Tensor& self, const Tensor& other, const Scalar& alpha) {
+  return native::mkldnn_add_out(self, other, alpha, self);
+}
+// LUIS_MODS
 
 Tensor& mkldnn_mul_out(const Tensor& self, const Tensor& other, Tensor& result) {
   TORCH_CHECK(result.sizes() == self.sizes(),

@@ -157,6 +157,15 @@ TORCH_META_FUNC2(add, Tensor) (
   native::alpha_check(dtype(), alpha);
 }
 
+//LUIS_MODS - add meta add function...
+TORCH_META_FUNC2(luis_add, Tensor) (
+  const Tensor& self, const Tensor& other, const Scalar& alpha
+) {
+  build_borrowing_binary_op(maybe_get_output(), self, other);
+  native::alpha_check(dtype(), alpha);
+}
+//LUIS_MODS
+
 TORCH_META_FUNC2(sub, Tensor) (
   const Tensor& self, const Tensor& other, const Scalar& alpha
 ) {
@@ -1077,6 +1086,12 @@ Tensor add_zerotensor(const Tensor& self, const Tensor& other, const Scalar& alp
   return maybe_add_maybe_sub(self, other, alpha);
 }
 
+//LUIS_MOD
+Tensor luis_add_zerotensor(const Tensor& self, const Tensor& other, const Scalar& alpha) {
+  return maybe_add_maybe_sub(self, other, alpha);
+}
+//LUIS_MOD
+
 Tensor sub_zerotensor(const Tensor& self, const Tensor& other, const Scalar& alpha) {
   return maybe_add_maybe_sub(self, other, -alpha);
 }
@@ -1165,6 +1180,16 @@ Tensor add(const Tensor& self, const Scalar& other, const Scalar& alpha) {
 Tensor& add_(Tensor& self, const Scalar& other, const Scalar& alpha) {
   return self.add_(wrapped_scalar_tensor(other), alpha);
 }
+
+//LUIS_MODS
+Tensor luis_add(const Tensor& self, const Scalar& other, const Scalar& alpha) {
+  return at::luis_add(self, wrapped_scalar_tensor(other), alpha);
+}
+
+Tensor& luis_add(Tensor& self, const Scalar& other, const Scalar& alpha) {
+  return self.luis_add_(wrapped_scalar_tensor(other), alpha);
+}
+//LUIS_MODS
 
 Tensor remainder(const Tensor& self, const Scalar& other) {
   // redispatch
