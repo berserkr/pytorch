@@ -134,7 +134,7 @@ Tensor NestedTensor_elementwise_Tensor(
       const auto self_sizes = self_ptr->get_nested_sizes();
       auto result_buffer = at::empty_like(self_buffer);
       auto result = wrap_buffer(result_buffer, self_sizes);
-      if (op_name == "add") {
+      if (op_name == "add" || op_name == "luis_add") {
         nested_dense_elementwise_stub(self.device().type(), result, self, other_, NESTED_DENSE_OP::ADD);
       } else if (op_name == "mul") {
         nested_dense_elementwise_stub(self.device().type(), result, self, other_, NESTED_DENSE_OP::MUL);
