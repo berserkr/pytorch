@@ -20,6 +20,8 @@
 #include <ATen/ops/_to_copy.h>
 #include <ATen/ops/add.h>
 #include <ATen/ops/add_native.h>
+#include <ATen/ops/luis_add.h>
+#include <ATen/ops/luis_add_native.h>
 #include <ATen/ops/add_ops.h>
 #include <ATen/ops/and_native.h>
 #include <ATen/ops/arctan2_native.h>

@@ -22,6 +22,7 @@ resolve_conj, complex
 acos, primitive pointwise
 arccos, alias
 add, primitive pointwise
+luis_add, primitive pointwise
 addmv, composite matmul
 addr, composite pointwise
 affine_grid_generator, factory
