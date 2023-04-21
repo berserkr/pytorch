@@ -23,6 +23,7 @@
 #include <ATen/ops/_sparse_coo_tensor_with_dims_and_tensors.h>
 #include <ATen/ops/_sparse_sum_native.h>
 #include <ATen/ops/add_native.h>
+#include <ATen/ops/luis_add_native.h>
 #include <ATen/ops/addmm_native.h>
 #include <ATen/ops/bmm_native.h>
 #include <ATen/ops/cat.h>

@@ -32,6 +32,8 @@
 #include <ATen/ops/abs_native.h>
 #include <ATen/ops/add.h>
 #include <ATen/ops/add_native.h>
+#include <ATen/ops/luis_add.h>
+#include <ATen/ops/luis_add_native.h>
 #include <ATen/ops/addmm.h>
 #include <ATen/ops/addmm_native.h>
 #include <ATen/ops/angle.h>
