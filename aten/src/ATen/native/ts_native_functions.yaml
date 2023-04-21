@@ -9,6 +9,7 @@ full_codegen:
   - _softmax_backward_data
   - abs
   - add.Tensor
+  - luis_add.Tensor
   - addcdiv
   - addcmul
   - addmm
