@@ -188,6 +188,17 @@ Tensor NestedTensor_luis_add_Tensor(
         return at::luis_add(b1, b2, alpha);
       });
 }
+
+//TODO: have to define this?
+Tensor NestedTensor_luis_add_Tensor(
+    Tensor& self,
+    const Tensor& other,
+    const Scalar& alpha) {
+  return NestedTensor_elementwise_Tensor(
+      self, other, "luis_add", true /* supports_striding*/, [alpha](Tensor& b1, const Tensor& b2) {
+        return at::luis_add(b1, b2, alpha);
+      });
+}
 // LUIS_MODS
 
 Tensor NestedTensor_sub_Tensor(
