@@ -4468,6 +4468,9 @@ def sample_inputs_index(op_info, device, dtype, requires_grad, reference=False, 
     select = "index_select" in op_info.name
     # target.index_add(dim, idx, source, *, alpha=1)
     add = "index_add" in op_info.name
+
+    luis_add = "index_luis_add" in op_info.name #LUIS_MODS
+
     # target.index_copy(dim, idx, source)
     copy = "index_copy" in op_info.name
     # target.index_fill(dim, idx, value)
@@ -4481,7 +4484,7 @@ def sample_inputs_index(op_info, device, dtype, requires_grad, reference=False, 
     else:
         make_arg = partial(make_tensor, device=device, dtype=dtype, requires_grad=requires_grad)
         # idx They need to be different for copy and add to be deterministic
-        if copy or add:
+        if copy or add or luis_add:
             make_idx = partial(torch.randperm, device=device, dtype=torch.int64)
         else:
             def make_idx(n):
@@ -4489,7 +4492,7 @@ def sample_inputs_index(op_info, device, dtype, requires_grad, reference=False, 
 
     shapes = [(), (1,), (S, S)]
     # extra parameter for add
-    if add:
+    if add or luis_add:
         if dtype == torch.bool:
             alphas = (True, False)
         else:
@@ -4516,7 +4519,7 @@ def sample_inputs_index(op_info, device, dtype, requires_grad, reference=False, 
         args.append(idx)
 
         # source
-        if copy or add:
+        if copy or add or luis_add:
             args.append(make_arg(shape))
         elif fill:
             args.append(value)
@@ -8106,7 +8109,7 @@ class foreach_inputs_sample_func:
             disable_fastpath = "foreach_div" in opinfo.name and dtype in integral_types_and(torch.bool)
             if isinstance(rightmost_arg, bool):
                 disable_fastpath |= dtype == torch.bool
-                if opinfo.ref in (torch.add, torch.mul):
+                if opinfo.ref in (torch.add, torch.luis_add, torch.mul):
                     disable_fastpath = False
             elif isinstance(rightmost_arg, int):
                 disable_fastpath |= dtype == torch.bool
@@ -8430,6 +8433,14 @@ foreach_unary_op_db: List[OpInfo] = [
 foreach_binary_op_db: List[OpInfo] = [
     ForeachFuncInfo(
         "add",
+        dtypes=all_types_and_complex_and(torch.bool, torch.bfloat16, torch.float16),
+        dtypesIfCUDA=all_types_and_complex_and(torch.bool, torch.bfloat16, torch.float16),
+        supports_alpha_param=True,
+        sample_inputs_func=foreach_inputs_sample_func(2, True, True),
+        supports_autograd=True,
+    ),
+    ForeachFuncInfo(
+        "luis_add",
         dtypes=all_types_and_complex_and(torch.bool, torch.bfloat16, torch.float16),
         dtypesIfCUDA=all_types_and_complex_and(torch.bool, torch.bfloat16, torch.float16),
         supports_alpha_param=True,
@@ -8983,6 +8994,42 @@ op_db: List[OpInfo] = [
                        condition=lambda x: (x < 1 if not x.is_complex() else torch.zeros_like(x, dtype=torch.bool)),
                        safe_val=2)),
     BinaryUfuncInfo('add',
+                    # NumPy has no builtin reference for the alpha kwarg, but it is easy enough to emulate
+                    ref=lambda input, other, *, alpha=1: np.add(input, other) if alpha == 1 \
+                    else np.add(input, np.multiply(alpha, other)),
+                    dtypes=all_types_and_complex_and(torch.bool, torch.bfloat16,
+                                                     torch.float16, torch.chalf),
+                    assert_autodiffed=True,
+                    sample_inputs_func=sample_inputs_add_sub,
+                    supports_fwgrad_bwgrad=True,
+                    supports_forward_ad=True,
+                    supports_two_python_scalars=True,
+                    decorators=(
+                        DecorateInfo(
+                            toleranceOverride({torch.chalf: tol(atol=1e-2, rtol=0)}),
+                            'TestBinaryUfuncs', 'test_reference_numerics'),
+                    ),
+                    skips=(
+                        # boolean alpha not handled properly
+                        DecorateInfo(unittest.expectedFailure,
+                                     'TestCudaFuserOpInfo',
+                                     'test_nvfuser_correctness',
+                                     dtypes=(torch.bool,)),
+                        # boolean alpha not handled properly
+                        DecorateInfo(unittest.expectedFailure,
+                                     'TestNNCOpInfo',
+                                     'test_nnc_correctness',
+                                     dtypes=(torch.bool,)),
+                        DecorateInfo(unittest.skip("Skipped!"),
+                                     'TestCommon',
+                                     'test_numpy_refs',
+                                     dtypes=(torch.complex128,)),
+                        DecorateInfo(unittest.skip("Skipped!"),
+                                     'TestBinaryUfuncs',
+                                     'test_reference_numerics_extremal_values',
+                                     dtypes=(torch.complex64, torch.complex128)),
+                    )),
+    BinaryUfuncInfo('luis_add',
                     # NumPy has no builtin reference for the alpha kwarg, but it is easy enough to emulate
                     ref=lambda input, other, *, alpha=1: np.add(input, other) if alpha == 1 \
                     else np.add(input, np.multiply(alpha, other)),
@@ -18945,6 +18992,13 @@ python_ref_db = [
         "_refs.add",
         torch_opinfo_name="add",
         # https://github.com/pytorch/pytorch/issues/76944
+        supports_two_python_scalars=True,
+        supports_one_python_scalar=True,
+    ),
+    ElementwiseBinaryPythonRefInfo(
+        "_refs.luis_add",
+        torch_opinfo_name="luis_add",
+        # LUIS_MODS This is a custom add call for understanding purposes 
         supports_two_python_scalars=True,
         supports_one_python_scalar=True,
     ),

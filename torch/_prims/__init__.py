@@ -104,6 +104,8 @@ __all__ = [
     # Elementwise binary prims
     #
     "add",
+    # LUIS_MODS 
+    "luis_add",
     "atan2",
     "bitwise_and",
     "bitwise_or",
@@ -902,6 +904,14 @@ trunc = _make_elementwise_unary_prim(
 add = _make_elementwise_binary_prim(
     name="add",
     impl_aten=torch.add,
+    doc="",
+    type_promotion=ELEMENTWISE_PRIM_TYPE_PROMOTION_KIND.DEFAULT,
+)
+
+# LUIS_MODS
+luis_add = _make_elementwise_binary_prim(
+    name="luis_add",
+    impl_aten=torch.luis_add,
     doc="",
     type_promotion=ELEMENTWISE_PRIM_TYPE_PROMOTION_KIND.DEFAULT,
 )

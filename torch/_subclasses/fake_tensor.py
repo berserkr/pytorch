@@ -772,6 +772,9 @@ def get_fast_op_impls():
     register_fast_op_impl(torch.ops.aten.add.Tensor)(
         make_fast_binary_impl(torch._refs.add)
     )
+    register_fast_op_impl(torch.ops.aten.luis_add.Tensor)(
+        make_fast_binary_impl(torch._refs.luis_add) # LUIS_MODS
+    )
     register_fast_op_impl(torch.ops.aten.sub.Tensor)(
         make_fast_binary_impl(torch._refs.sub)
     )
