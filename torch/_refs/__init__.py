@@ -118,6 +118,7 @@ __all__ = [
     # Elementwise Binary References
     #
     "add",
+    "luis_add" # LUIS_MODS
     "atan2",
     "bitwise_and",
     "bitwise_left_shift",
@@ -977,6 +978,40 @@ def add(
 
     return prims.add(a, b)
 
+# LUIS_MODS
+@register_decomposition(aten.luis_add)
+@out_wrapper()
+@elementwise_type_promotion_wrapper(
+    type_promoting_args=("a", "b"),
+    type_promotion_kind=ELEMENTWISE_TYPE_PROMOTION_KIND.DEFAULT,
+)
+def luis_add(
+    a: Union[TensorLikeType, NumberType],
+    b: Union[TensorLikeType, NumberType],
+    *,
+    alpha: Optional[NumberType] = None,
+):
+    """
+    Reference implementation of torch.luis_add
+    """
+
+    a, b = _maybe_broadcast(a, b)
+
+    if alpha is not None:
+        dtype = a.dtype if isinstance(a, TensorLike) else b.dtype  # type: ignore[union-attr]
+        python_type = utils.dtype_to_type(dtype)
+        if python_type != bool and not utils.is_weakly_lesser_type(
+            type(alpha), python_type
+        ):
+            msg = (
+                "alpha argument of type {0} cannot be safely cast to type {1}!".format(
+                    type(alpha), python_type
+                )
+            )
+            raise ValueError(msg)
+        b = prims.mul(b, alpha)
+
+    return prims.luis_add(a, b)
 
 # TODO: add docstring
 @_make_elementwise_binary_reference(
@@ -5459,6 +5494,7 @@ abs_ = _make_inplace(abs)
 acos_ = _make_inplace(acos)
 acosh_ = _make_inplace(acosh)
 add_ = _make_inplace(add)
+luis_add_ = _make_inplace(luis_add) # LUIS_MODS
 addcmul_ = _make_inplace(addcmul)
 addcdiv_ = _make_inplace(addcdiv)
 asin_ = _make_inplace(asin)

@@ -297,6 +297,14 @@ TORCH_LIBRARY_IMPL(aten, Named, m) {
   m.impl("lt.Scalar_out", CppFunction::makeFallthrough());
   m.impl("lt.Tensor", CppFunction::makeFallthrough());
   m.impl("lt.Tensor_out", CppFunction::makeFallthrough());
+  
+  //LUIS_MODS
+  m.impl("luis_add.Scalar", CppFunction::makeFallthrough());
+  m.impl("luis_add.Tensor", CppFunction::makeFallthrough());
+  m.impl("luis_add.out", CppFunction::makeFallthrough());
+  m.impl("luis_add_.Scalar", CppFunction::makeFallthrough());
+  m.impl("luis_add_.Tensor", CppFunction::makeFallthrough());
+
   m.impl("masked_fill.Scalar", CppFunction::makeFallthrough());
   m.impl("masked_fill.Tensor", CppFunction::makeFallthrough());
   m.impl("masked_fill_.Scalar", CppFunction::makeFallthrough());
