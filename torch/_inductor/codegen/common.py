@@ -183,10 +183,12 @@ class ExprPrinter(Printer):
         base = self._print(base)
         # NB: Remember this is sizevar computation!  You don't typically
         # expect to have to do floating point computation including exponents
-        # in sizevar compute.  Instead of adding support for sqrt/floating
+        # in sizevar compute.  Instead of adding support for floating
         # point pow, you should make upstream retranslate the Sympy expression
         # into Tensor expressions earlier and do that instead.
-        assert exp.is_integer
+        if exp == 0.5:
+            return f"math.sqrt({base})"
+        assert exp == int(exp), exp
         exp = int(exp)
         if exp > 0:
             return "*".join([self.paren(base)] * exp)
@@ -257,12 +259,6 @@ class OpOverrides:
     @staticmethod
     def square(x):
         return ops.mul(x, x)
-
-    @staticmethod
-    def sign(x):
-        left = ops.where(ops.lt("0", x), "1", "0")
-        right = ops.where(ops.lt(x, "0"), "1", "0")
-        return ops.sub(left, right)
 
     @staticmethod
     def bitwise_not(x):
@@ -521,6 +517,19 @@ class KernelArgs:
         return _is_removed(name, self.output_buffers) and _is_removed(
             name, self.inplace_buffers
         )
+
+    # Includes inplace buffers, excludes removed buffers.  Essentially,
+    # after you do a call into this kernel, which buffers actually contain
+    # updated data?  Modeled off of python_argdefs.
+    def live_output_buffers(self):
+        live_outs = set()
+        for inplaced in unique(self.inplace_buffers.values()):
+            live_outs.add(inplaced.other_names[-1])
+        for outer, inner in self.output_buffers.items():
+            if outer in self.inplace_buffers or inner == "REMOVED":
+                continue
+            live_outs.add(outer)
+        return live_outs
 
 
 class CSEVariable:
@@ -807,3 +816,8 @@ class OptimizationContext:
     dtype: torch.dtype = None
     ops_name: str = ""
     is_most_inner_loop_irrevelant: bool = False
+
+    # Load uint8 value as float32
+    is_load_uint8_as_float: bool = False
+    # Store float32 value as uint8
+    is_store_float_as_uint8: bool = False
